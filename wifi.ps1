@@ -1,4 +1,6 @@
-$whuri = "https://discord.com/api/webhooks/1319003916939169933/pgxbCrWor5dI9WVu5JDYDYRb7PgXiHz7_zqSmicappBBlRG677X7hqWRzSTNFKMknDfm"
+param (
+    [string]$whuri
+)
 # shortened URL Detection
 if ($whuri.Ln -ne 121){Write-Host "Shortened Webhook URL Detected.." ; $whuri = (irm $whuri).url}
 
