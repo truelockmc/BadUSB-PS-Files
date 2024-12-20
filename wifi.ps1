@@ -1,6 +1,3 @@
-param (
-    [string]$whuri
-)
 # Export-Verzeichnis
 $exportDir = "$env:temp\SomeStuff"
 
