@@ -1,6 +1,3 @@
-param (
-    [string]$dc
-)
 $temp = [System.IO.Path]::GetTempPath() 
 $tempFolder = Join-Path -Path $temp -ChildPath 'dbfiles'
 $googledest = Join-Path -Path $tempFolder -ChildPath 'google'
