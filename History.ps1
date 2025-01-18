@@ -6,6 +6,34 @@ function Add-PowerShellToAllowedApps {
 # Fügen Sie PowerShell zur Liste der zugelassenen Anwendungen hinzu
 Add-PowerShellToAllowedApps
 
+# Set the path to download the SQLite package
+$nugetUrl = "https://api.nuget.org/v3/index.json"
+$packagesDirectory = "$env:TEMP\sqlite-packages"
+$packageName = "System.Data.SQLite.Core"
+$packageVersion = "1.0.114.5"
+
+# Ensure the packages directory exists
+if (-Not (Test-Path -Path $packagesDirectory)) {
+    New-Item -Path $packagesDirectory -ItemType Directory | Out-Null
+}
+
+# Download and install the NuGet package
+function Install-SQLitePackage {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $nugetExe = "$packagesDirectory\nuget.exe"
+    
+    if (-Not (Test-Path -Path $nugetExe)) {
+        Invoke-WebRequest "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile $nugetExe
+    }
+
+    & $nugetExe install $packageName -Version $packageVersion -OutputDirectory $packagesDirectory -Source $nugetUrl
+}
+
+Install-SQLitePackage
+
+# Load the SQLite assembly
+Add-Type -Path "$packagesDirectory\$packageName.$packageVersion\lib\net46\System.Data.SQLite.dll"
+
 # Funktion zum Exportieren des Verlaufs von Chrome und Edge
 function Export-ChromeEdgeHistory {
     param (
@@ -28,18 +56,7 @@ ORDER BY
     $tempDb = "$env:TEMP\${browser}_History"
     Copy-Item $historyPath $tempDb -Force
 
-    # Load SQLite assembly
-    Add-Type -TypeDefinition @"
-using System;
-using System.Data.SQLite;
-public class SQLiteHelper {
-    public static string GetConnectionString(string dbPath) {
-        return $"Data Source={dbPath};Version=3;";
-    }
-}
-"@
-    $connectionString = [SQLiteHelper]::GetConnectionString($tempDb)
-
+    $connectionString = "Data Source=$tempDb;Version=3;"
     $connection = New-Object System.Data.SQLite.SQLiteConnection
     $connection.ConnectionString = $connectionString
     $connection.Open()
@@ -85,18 +102,7 @@ ORDER BY
     visit_date DESC
 "@
 
-    # Load SQLite assembly
-    Add-Type -TypeDefinition @"
-using System;
-using System.Data.SQLite;
-public class SQLiteHelper {
-    public static string GetConnectionString(string dbPath) {
-        return $"Data Source={dbPath};Version=3;";
-    }
-}
-"@
-    $connectionString = [SQLiteHelper]::GetConnectionString($historyPath)
-
+    $connectionString = "Data Source=$historyPath;Version=3;"
     $connection = New-Object System.Data.SQLite.SQLiteConnection
     $connection.ConnectionString = $connectionString
     $connection.Open()
