@@ -62,6 +62,7 @@ if __name__ == '__main__':
     # Standardpfade für logins.json und key4.db im selben Verzeichnis wie das Skript
     default_logins_path = path.join(script_dir, 'logins.json')
     default_key4db_path = path.join(script_dir, 'key4.db')
+    output_file_path = path.join(script_dir, 'decrypted_passwords.txt')
 
     parser = argparse.ArgumentParser(description='Decrypt Firefox passwords')
     parser.add_argument('-l', '--logins', default=default_logins_path, help='Path to logins.json')
@@ -72,5 +73,8 @@ if __name__ == '__main__':
 
     passwords = decrypt_firefox_passwords(args.logins, args.keydb, args.password)
     
-    for p in passwords:
-        print(f"URL: {p['url']}, Username: {p['username']}, Password: {p['password']}")
+    with open(output_file_path, 'w') as f:
+        for p in passwords:
+            f.write(f"URL: {p['url']}, Username: {p['username']}, Password: {p['password']}\n")
+    
+    print(f"Decrypted passwords have been saved to {output_file_path}")
