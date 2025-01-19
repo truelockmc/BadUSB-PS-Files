@@ -20,6 +20,13 @@ if ($usbDriveLetter) {
     # VBScript im Hintergrund ausführen
     Start-Process -FilePath "wscript.exe" -ArgumentList "`"$tempScriptPath`"" -WindowStyle Hidden
 
+    # Sound abspielen
+    [System.Media.SystemSounds]::Beep.Play()
+
+    # USB-Laufwerk sicher auswerfen
+    $drive = Get-WmiObject -Query "SELECT * FROM Win32_Volume WHERE DriveLetter = '$usbDriveLetter'" | Select-Object -First 1
+    $drive.Dismount()
+
     # Ursprüngliches PowerShell-Fenster schließen
     Stop-Process -Id $PID
 } else {
