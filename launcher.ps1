@@ -1,4 +1,3 @@
-# Funktion zum Ermitteln des USB-Laufwerksbuchstabens mit dem Namen "BADSUN"
 function Get-USBDriveLetter {
     $usbDrive = Get-WmiObject -Query "SELECT * FROM Win32_Volume WHERE Label='BADSUN'" | Select-Object -First 1
     return $usbDrive.DriveLetter
@@ -24,8 +23,19 @@ if ($usbDriveLetter) {
     [System.Media.SystemSounds]::Beep.Play()
 
     # USB-Laufwerk sicher auswerfen
-    $drive = Get-WmiObject -Query "SELECT * FROM Win32_Volume WHERE DriveLetter = '$usbDriveLetter'" | Select-Object -First 1
-    $drive.Dismount()
+    $usbDriveLetter = $usbDriveLetter.TrimEnd(':')  # Entferne das ":" vom Laufwerksbuchstaben
+
+    # Verwende Diskpart zum sicheren Entfernen des USB-Laufwerks
+    $diskpartScript = @"
+select volume $usbDriveLetter
+remove
+"@
+
+    $diskpartScript | Out-File -FilePath "$env:TEMP\diskpartScript.txt" -Encoding ASCII
+    Start-Process -FilePath "diskpart.exe" -ArgumentList "/s `"$env:TEMP\diskpartScript.txt`"" -Wait
+
+    # Temporäre Datei entfernen
+    Remove-Item -Path "$env:TEMP\diskpartScript.txt"
 
     # Ursprüngliches PowerShell-Fenster schließen
     Stop-Process -Id $PID
