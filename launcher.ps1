@@ -18,7 +18,7 @@ if ($usbDriveLetter) {
     Copy-Item -Path $usbScriptPath -Destination $tempScriptPath -Force
 
     # Skript im Hintergrund ausführen
-    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -WindowStyle Hidden -File `"$tempScriptPath`"" -WindowStyle Hidden
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$tempScriptPath`"" -WindowStyle Hidden
 
     # Ursprüngliches PowerShell-Fenster schließen
     Stop-Process -Id $PID
