@@ -8,17 +8,17 @@ function Get-USBDriveLetter {
 $usbDriveLetter = Get-USBDriveLetter
 
 if ($usbDriveLetter) {
-    # Pfad zur Datei scripty.ps1 auf dem USB-Laufwerk
-    $usbScriptPath = Join-Path -Path $usbDriveLetter -ChildPath "scripty.ps1"
+    # Pfad zur VBScript-Datei auf dem USB-Laufwerk
+    $usbScriptPath = Join-Path -Path $usbDriveLetter -ChildPath "go.vbs"
     
     # Pfad zum temporären Ordner
-    $tempScriptPath = Join-Path -Path $env:TEMP -ChildPath "scripty.ps1"
+    $tempScriptPath = Join-Path -Path $env:TEMP -ChildPath "go.vbs"
 
-    # Datei scripty.ps1 in den temporären Ordner kopieren
+    # Datei script.vbs in den temporären Ordner kopieren
     Copy-Item -Path $usbScriptPath -Destination $tempScriptPath -Force
 
-    # Skript im Hintergrund ausführen
-    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$tempScriptPath`"" -WindowStyle Hidden
+    # VBScript im Hintergrund ausführen
+    Start-Process -FilePath "wscript.exe" -ArgumentList "`"$tempScriptPath`"" -WindowStyle Hidden
 
     # Ursprüngliches PowerShell-Fenster schließen
     Stop-Process -Id $PID
