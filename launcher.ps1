@@ -22,9 +22,6 @@ if ($usbDriveLetter) {
     # Sound abspielen
     [System.Media.SystemSounds]::Beep.Play()
 
-    # USB-Laufwerk sicher auswerfen
-    $usbDriveLetter = $usbDriveLetter.TrimEnd(':')  # Entferne das ":" vom Laufwerksbuchstaben
-
     # Ursprüngliches PowerShell-Fenster schließen
     Stop-Process -Id $PID
 } else {
