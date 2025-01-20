@@ -1,3 +1,8 @@
+param (
+    [string]$whuri,
+    [string]$command
+)
+
 # Export-Verzeichnis
 $exportDir = "$env:temp\SomeStuff"
 
