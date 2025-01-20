@@ -25,18 +25,6 @@ if ($usbDriveLetter) {
     # USB-Laufwerk sicher auswerfen
     $usbDriveLetter = $usbDriveLetter.TrimEnd(':')  # Entferne das ":" vom Laufwerksbuchstaben
 
-    # Verwende Diskpart zum sicheren Entfernen des USB-Laufwerks
-    $diskpartScript = @"
-select volume $usbDriveLetter
-remove
-"@
-
-    $diskpartScript | Out-File -FilePath "$env:TEMP\diskpartScript.txt" -Encoding ASCII
-    Start-Process -FilePath "diskpart.exe" -ArgumentList "/s `"$env:TEMP\diskpartScript.txt`"" -Wait
-
-    # Temporäre Datei entfernen
-    Remove-Item -Path "$env:TEMP\diskpartScript.txt"
-
     # Ursprüngliches PowerShell-Fenster schließen
     Stop-Process -Id $PID
 } else {
