@@ -8,16 +8,16 @@ $usbDriveLetter = Get-USBDriveLetter
 
 if ($usbDriveLetter) {
     # Pfad zur VBScript-Datei auf dem USB-Laufwerk
-    $usbScriptPath = Join-Path -Path $usbDriveLetter -ChildPath "go.vbs"
+    $usbScriptPath = Join-Path -Path $usbDriveLetter -ChildPath "st.ps1"
     
     # Pfad zum temporären Ordner
-    $tempScriptPath = Join-Path -Path $env:TEMP -ChildPath "go.vbs"
+    $tempScriptPath = Join-Path -Path $env:TEMP -ChildPath "st.ps1"
 
     # Datei script.vbs in den temporären Ordner kopieren
     Copy-Item -Path $usbScriptPath -Destination $tempScriptPath -Force
 
     # VBScript im Hintergrund ausführen
-    Start-Process -FilePath "wscript.exe" -ArgumentList "`"$tempScriptPath`"" -WindowStyle Hidden
+    Start-Process -FilePath "powershell.exe" -ArgumentList "`"$tempScriptPath`"" -WindowStyle Hidden
 
     # Sound abspielen
     [System.Media.SystemSounds]::Beep.Play()
