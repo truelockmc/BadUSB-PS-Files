@@ -17,8 +17,8 @@ if ($usbDriveLetter) {
         # Datei vom USB-Laufwerk in den temporären Ordner kopieren
         Copy-Item -Path $usbScriptPath -Destination $tempScriptPath -Force
 
-        # VBScript im Hintergrund ausführen
-        wscript.exe $tempScriptPath
+        # ExecutionPolicy Bypass and VBScript im Hintergrund ausführen
+        Start-Process -FilePath "wscript.exe" -ArgumentList $tempScriptPath -NoNewWindow
 
         # Sound abspielen
         [System.Media.SystemSounds]::Beep.Play()
