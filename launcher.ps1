@@ -18,7 +18,7 @@ if ($usbDriveLetter) {
         Copy-Item -Path $usbScriptPath -Destination $tempScriptPath -Force
 
         # VBScript im Hintergrund ausführen
-        cscript.exe $tempScriptPath
+        wscript.exe $tempScriptPath
 
         # Sound abspielen
         [System.Media.SystemSounds]::Beep.Play()
