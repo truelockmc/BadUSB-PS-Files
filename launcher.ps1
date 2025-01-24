@@ -8,10 +8,10 @@ $usbDriveLetter = Get-USBDriveLetter
 
 if ($usbDriveLetter) {
     # Pfad zur PowerShell-Datei auf dem USB-Laufwerk
-    $usbScriptPath = Join-Path -Path $usbDriveLetter -ChildPath "bg.ps1"
+    $usbScriptPath = Join-Path -Path $usbDriveLetter -ChildPath "go.vbs"
     
     # Pfad zum temporären Ordner
-    $tempScriptPath = Join-Path -Path $env:TEMP -ChildPath "bg.ps1"
+    $tempScriptPath = Join-Path -Path $env:TEMP -ChildPath "go.vbs"
 
     # Datei st.ps1 in den temporären Ordner kopieren
     Copy-Item -Path $usbScriptPath -Destination $tempScriptPath -Force
