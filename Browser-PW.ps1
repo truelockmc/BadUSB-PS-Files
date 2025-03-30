@@ -46,7 +46,7 @@ function Copy-And-Send {
 
     # Daten an Webhook senden
     $Parameters = @{
-        "Uri"         = $webhookUri
+        "Uri"         = $whuri
         "Method"      = "POST"
         "Body"        = $JsonPayload
         "ContentType" = "application/json"
